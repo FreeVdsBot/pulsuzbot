@@ -1,2 +1,0 @@
-# pulsuzbot
-pulsuz
